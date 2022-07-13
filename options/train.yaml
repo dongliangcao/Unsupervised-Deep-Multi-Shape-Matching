@@ -1,0 +1,111 @@
+# general setting
+name: faust
+backend: dp # DataParallel
+type: ConsistentModel
+temp: 0.2
+n_iter: 10
+n_eig: 80
+num_gpu: auto
+manual_seed: 1234
+milestones:
+  8000: 100
+  16000: 120
+
+# path
+path:
+  resume_state: ~
+
+# datasets
+datasets:
+  train_dataset:
+    name: FaustTrain
+    type: PairFaustDataset
+    phase: train
+    data_root: ../data/FAUST_r
+    return_vertices: true
+    return_shot: true
+    num_shot: 352
+    return_evecs: true
+    num_evecs: 120
+    return_label: false
+    return_dist: false
+  test_dataset:
+    name: FaustVal
+    type: PairFaustDataset
+    phase: val
+    data_root: ../data/FAUST_r
+    return_vertices: true
+    return_shot: true
+    num_shot: 352
+    return_evecs: false
+    return_label: true
+    return_dist: true
+  # setting for train dataset
+  batch_size: 1
+  num_worker: 8
+  pin_memory: true
+
+# network setting
+networks:
+  feature_extractor:
+    type: DiffusionNet
+    in_channels: 352
+    out_channels: 256
+    cache_dir: ../data/FAUST_r/diffusion
+    input_type: shot
+  fmap_net:
+    type: FunctionalMapNet
+    bidirectional: true
+  classifier:
+    type: DiffusionNet
+    in_channels: 256
+    out_channels: 5000
+    cache_dir: ../data/FAUST_r/diffusion
+    input_type: shot
+
+# training setting
+train:
+  total_epochs: 5
+  optims:
+    feature_extractor:
+      type: Adam
+      lr: 1.0e-3
+      betas: [0.5, 0.999]
+    classifier:
+      type: Adam
+      lr: 1.0e-3
+      betas: [0.5, 0.999]
+  schedulers:
+    feature_extractor:
+      type: CosineAnnealingLR
+      T_max: 5
+      eta_min: 1e-4
+    classifier:
+      type: CosineAnnealingLR
+      T_max: 5
+      eta_min: 1e-4
+  losses:
+    surfmnet_loss:
+      type: SURFMNetLoss
+      w_bij: 1.0
+      w_orth: 1.0
+      w_lap: 1.0e-3
+      w_pre: 0
+    align_loss:
+      type: AlignLoss
+      loss_weight: 1.0e-2
+
+# validation setting
+val:
+  val_freq: 2000
+  metrics:
+    geo_error:
+      type: calculate_geodesic_error
+    plot_pck:
+      type: plot_pck
+
+# log setting
+logger:
+  print_freq: 50
+  save_checkpoint_freq: 2000
+

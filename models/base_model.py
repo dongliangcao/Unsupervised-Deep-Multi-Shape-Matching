@@ -1,6 +1,10 @@
 import os
 import time
+import shutil
+import numpy as np
+import matplotlib.pyplot as plt
 from copy import deepcopy
+from tqdm import tqdm
 from collections import OrderedDict
 
 import torch
@@ -11,9 +15,12 @@ from networks import build_network
 from losses import build_loss
 from metrics import build_metric
 
-from .lr_scheduler import CosineAnnealingRestartLR, MultiStepRestartLR
+from .lr_scheduler import MultiStepRestartLR
 from utils import get_root_logger
 from utils.dist_util import master_only
+from utils.logger import AvgTimer
+from utils.texture_util import write_obj_pair
+from utils.tensor_util import to_numpy
 
 
 class BaseModel:
@@ -98,14 +105,72 @@ class BaseModel:
 
     @torch.no_grad()
     def validation(self, dataloader, tb_logger, update=True):
-        """Validation function.
+        # eval mode
+        self.eval()
 
-        Args:
-            dataloader (torch.utils.data.DataLoader): Validation dataloader.
-            tb_logger (tensorboard logger): Tensorboard logger.
-            update (bool): update best metric and best model. Default True
-        """
-        pass
+        # save results
+        metrics_result = {}
+
+        # geodesic errors
+        geo_errors = []
+
+        # one iteration
+        timer = AvgTimer()
+        pbar = tqdm(dataloader)
+        for i, data in enumerate(pbar):
+            geo_err, p2p = self.validate_single(data, timer)
+            pbar.set_description(f'geo error: {geo_err.mean():.4f}')
+            geo_errors += [geo_err]
+            # visualize results
+            if self.opt.get('visualize', False):
+                if os.path.isfile('figures/texture2.png'):
+                    shutil.copy('figures/texture2.png', os.path.join(self.opt['path']['visualization'], 'texture2.png'))
+                data_x, data_y = data['first'], data['second']
+
+                verts_x, verts_y = to_numpy(data_x['verts'].squeeze()), to_numpy(data_y['verts'].squeeze())
+                faces_x, faces_y = to_numpy(data_x['faces'].squeeze()), to_numpy(data_y['faces'].squeeze())
+                file_x = os.path.join(self.opt['path']['visualization'], f'source_{i}.obj')
+                file_y = os.path.join(self.opt['path']['visualization'], f'target_{i}.obj')
+                write_obj_pair(file_x, file_y, verts_x, faces_x, verts_y, faces_y, p2p, 'texture2.png')
+
+        print('Avg time:', timer.get_avg_time())
+
+        # compute the average geodesic error
+        geo_errors = np.concatenate(geo_errors)
+        avg_geo_error = np.ma.masked_invalid(geo_errors).mean()
+        metrics_result['avg_error'] = avg_geo_error
+
+        # compute the auc and plot the pck
+        auc, fig, pcks = self.metrics['plot_pck'](geo_errors)
+        metrics_result['auc'] = auc
+
+        if tb_logger is not None:
+            step = self.curr_iter // self.opt['val']['val_freq']
+            tb_logger.add_figure('pck', fig, global_step=step)
+            tb_logger.add_scalar('val auc', auc, global_step=step)
+            tb_logger.add_scalar('val avg error', avg_geo_error, global_step=step)
+        else:
+            # save image
+            plt.savefig(os.path.join(self.opt['path']['visualization'], 'pck.png'))
+            # save pcks
+            np.save(os.path.join(self.opt['path']['visualization'], 'pck.npy'), pcks)
+
+        # display results
+        logger = get_root_logger()
+        logger.info(f'Val auc: {auc:.4f}')
+        logger.info(f'Val avg error: {avg_geo_error:.4f}')
+
+        # update best model state dict
+        if update and (self.best_metric is None or (metrics_result['avg_error'] < self.best_metric)):
+            self.best_metric = metrics_result['avg_error']
+            self.best_networks_state_dict = self._get_networks_state_dict()
+            logger.info(f'Best model is updated, average geodesic error: {self.best_metric:.4f}')
+
+        # train mode
+        self.train()
+
+    def validate_single(self, data, timer):
+        raise NotImplementedError
 
     def get_loss_metrics(self):
         if self.opt['dist']:

@@ -1,2 +1,13 @@
-torch==1.8.1
-torchvision==0.9.1
+joblib
+numpy
+matplotlib
+scikit-learn
+scipy
+trimesh
+networkx
+tb-nightly
+typing-extensions
+robust-laplacian
+polyscope
+potpourri3d
+einops

@@ -1,0 +1,51 @@
+# general setting
+name: faust
+backend: dp # DataParallel
+type: ConsistentModel
+temp: 0.2
+n_iter: 10
+num_gpu: auto
+manual_seed: 1234
+visualize: true
+
+# path
+path:
+  resume_state: checkpoints/faust.pth
+  resume: false
+
+# datasets
+datasets:
+  test_dataset:
+    name: FaustVal
+    type: PairFaustDataset
+    phase: val
+    data_root: ../data/FAUST_r
+    return_vertices: true
+    return_shot: true
+    num_shot: 352
+    return_evecs: false
+    return_label: true
+    return_dist: true
+
+# network setting
+networks:
+  feature_extractor:
+    type: DiffusionNet
+    in_channels: 352
+    out_channels: 256
+    cache_dir: ../data/FAUST_r/diffusion
+    input_type: shot
+  classifier:
+    type: DiffusionNet
+    in_channels: 256
+    out_channels: 5000
+    cache_dir: ../data/FAUST_r/diffusion
+    input_type: shot
+
+# validation setting
+val:
+  metrics:
+    geo_error:
+      type: calculate_geodesic_error
+    plot_pck:
+      type: plot_pck
