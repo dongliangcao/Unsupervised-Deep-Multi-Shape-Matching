@@ -37,6 +37,12 @@ After preprocessing, the data looks like this.
 Because the SHOT descriptor computation depends on [pyshot](https://github.com/uhlmanngroup/pyshot),
 please refer [pyshot](https://github.com/uhlmanngroup/pyshot) repository to install it.
 
+The pre-computed SHOT descriptors for FAUST and SCAPE datasets in this paper can be found in the following links:
+
+[FAUST_r](https://drive.google.com/file/d/1JOHr7LGo4GjSlyHf05tuPCvlSG2ogp83/view?usp=sharing)
+
+[SCAPE_r](https://drive.google.com/file/d/1YEukj9KAdOBKS5hJs8ZnZDoGcPnfruvC/view?usp=sharing)
+
 
 ## Train
 To train a model for 3D shape matching. You only need to write or use a YAML config file. 
